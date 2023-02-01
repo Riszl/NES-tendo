@@ -1,0 +1,634 @@
+package nes
+
+import (
+	"testing"
+
+	"github.com/nwidger/nintengo/rp2cgo2"
+)
+
+func TestConstant(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	if _, err := NewROMFile(buf); err != nil {
+		t.Errorf("Error loading Rom with valid constant in header: %v\n", err)
+	}
+
+	buf = []byte{
+		0x4f, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	if _, err := NewROMFile(buf); err == nil {
+		t.Error("No error loading Rom with invalid constant in header")
+	}
+
+	buf = []byte{
+		0x4e, 0x46, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	if _, err := NewROMFile(buf); err == nil {
+		t.Error("No error loading Rom with invalid constant in header")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x54, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	if _, err := NewROMFile(buf); err == nil {
+		t.Error("No error loading Rom with invalid constant in header")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1b,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	if _, err := NewROMFile(buf); err == nil {
+		t.Error("No error loading Rom with invalid constant in header")
+	}
+}
+
+func TestRunt(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0xff, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00,
+	}
+
+	_, err := NewROMFile(buf)
+
+	if err == nil {
+		t.Error("No error loading runt Rom")
+	}
+}
+
+func TestPrgBanks(t *testing.T) {
+	buf := make([]byte, 16+(16*1024)-1)
+
+	copy(buf, []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x01, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	})
+
+	_, err := NewROMFile(buf)
+
+	if err == nil {
+		t.Errorf("No error loading Rom with runt PRG bank")
+		return
+	}
+
+	buf = make([]byte, 16+(16*1024))
+
+	copy(buf, []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x01, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	})
+
+	n := 16 + (16 * 1024)
+
+	for i := 16; i < n; i++ {
+		switch i {
+		case 16, n - 1:
+			buf[i] = 0xee
+		default:
+			buf[i] = 0xff
+		}
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.PRGBanks != 0x01 {
+		t.Error("RomBanks is not 0x01")
+	}
+
+	n = (16 * 1024)
+
+	for i := 0; i < n; i++ {
+		var val uint8
+
+		switch i {
+		case 0, n - 1:
+			val = 0xee
+		default:
+			val = 0xff
+		}
+
+		if rom.ROMBanks[0][i] != val {
+			t.Errorf("ROM bank 0 data index %v is %02X not %02X\n", i, rom.ROMBanks[0][i], val)
+		}
+	}
+}
+
+func TestChrBanks(t *testing.T) {
+	buf := make([]byte, 16+(8*1024)-1)
+
+	copy(buf, []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x01, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	})
+
+	_, err := NewROMFile(buf)
+
+	if err == nil {
+		t.Error("No error loading Rom with runt CHR bank")
+		return
+	}
+
+	buf = make([]byte, 16+(8*1024))
+
+	copy(buf, []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x01, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	})
+
+	n := 16 + (8 * 1024)
+
+	for i := 16; i < n; i++ {
+		switch i {
+		case 16:
+		case n - 1:
+			buf[i] = 0xee
+		default:
+			buf[i] = 0xff
+		}
+	}
+
+	for i := 16; i < n; i++ {
+		switch i {
+		case 16, n - 1:
+			buf[i] = 0xee
+		default:
+			buf[i] = 0xff
+		}
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.CHRBanks != 0x01 {
+		t.Error("VRomBanks is not 0x01")
+	}
+
+	n = (8 * 1024)
+
+	for i := 0; i < n; i++ {
+		var val uint8
+
+		switch i {
+		case 0, n - 1:
+			val = 0xee
+		default:
+			val = 0xff
+		}
+
+		if rom.VROMBanks[0][i] != val {
+			t.Errorf("VROM bank 0 data index %v is %02X not %02X\n", i, rom.VROMBanks[0][i], val)
+		}
+	}
+}
+
+func TestMirroring(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mirroring != rp2cgo2.Horizontal {
+		t.Error("Mirroring is not Horizontal")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x01, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mirroring != rp2cgo2.Vertical {
+		t.Error("Mirroring is not Vertical")
+	}
+
+}
+
+func TestBattery(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Battery {
+		t.Error("Battery is true")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x02, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if !rom.Battery {
+		t.Error("Battery is false")
+	}
+
+}
+
+func TestTrainer(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Trainer {
+		t.Error("Trainer is true")
+	}
+
+	buf = make([]byte, 16+512-1)
+
+	copy(buf, []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x04, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	})
+
+	rom, err = NewROMFile(buf)
+
+	if err == nil {
+		t.Error("No error loading Rom with runt trainer data\n")
+		return
+	}
+
+	buf = make([]byte, 16+512)
+
+	copy(buf, []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x04, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	})
+
+	for i := 16; i < 16+512; i++ {
+		buf[i] = 0xff
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if !rom.Trainer {
+		t.Error("Trainer is false")
+	}
+
+	for i := 0; i < 512; i++ {
+		if rom.TrainerData[i] != 0xff {
+			t.Error("Trainer data is not all 0xff")
+		}
+	}
+}
+
+func TestFourScreen(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.FourScreen {
+		t.Error("FourScreen is true")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x08, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if !rom.FourScreen {
+		t.Error("FourScreen is false")
+	}
+
+}
+
+func TestMapperLow(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mapper != 0x00 {
+		t.Error("Mapper is not 0x00")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0xf0, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mapper != 0x0f {
+		t.Error("Mapper is not 0x0f")
+	}
+}
+
+func TestVsCart(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.VSCart {
+		t.Error("VSCart is true")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x08, 0x01,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if !rom.VSCart {
+		t.Error("VSCart is false")
+	}
+
+}
+
+func TestMapperHigh(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mapper != 0x00 {
+		t.Error("Mapper is not 0x00")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0xf0,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mapper != 0xf0 {
+		t.Error("Mapper is not 0xf0")
+	}
+}
+
+func TestMapper(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mapper != 0x00 {
+		t.Error("Mapper is not 0x00")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0xf0, 0xf0,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.Mapper != 0xff {
+		t.Error("Mapper is not 0xff")
+	}
+}
+
+func TestRamBanks(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0xff, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.RAMBanks != 0xff {
+		t.Error("RamBanks is not 0xff")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.RAMBanks != 0x01 {
+		t.Error("RamBanks is not 0x01")
+	}
+}
+
+func TestRegion(t *testing.T) {
+	buf := []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err := NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.RegionFlag != NTSC {
+		t.Error("Region is not NTSC")
+	}
+
+	buf = []byte{
+		0x4e, 0x45, 0x53, 0x1a,
+		0x00, 0x00, 0x01, 0x00,
+		0x00, 0x01, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+	}
+
+	rom, err = NewROMFile(buf)
+
+	if err != nil {
+		t.Errorf("Error loading valid Rom: %v\n", err)
+		return
+	}
+
+	if rom.RegionFlag != PAL {
+		t.Error("Region is not PAL")
+	}
+
+}
